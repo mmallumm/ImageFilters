@@ -43,26 +43,7 @@ pixel_t Gaussian(cv::Mat roi, double sigma) {
   return result;
 }
 
-template <class pixel_t, class allignment_t = pixel_t>
-pixel_t Laplasian(cv::Mat roi) {
-  pixel_t result;
-  allignment_t resultAllignment;
-  int x = roi.cols / 2;
-  int y = roi.rows / 2;
-  allignment_t val_1 = roi.at<pixel_t>(x + 1, y);
-  allignment_t val_2 = roi.at<pixel_t>(x - 1, y);
-  allignment_t val_3 = roi.at<pixel_t>(x, y + 1);
-  allignment_t val_4 = roi.at<pixel_t>(x, y - 1);
-  allignment_t val_0 = roi.at<pixel_t>(x, y);
-  resultAllignment = val_1 + val_2 + val_3 + val_4 - 4 * val_0;
-
-  result = resultAllignment;
-  return result;
-}
-
-template <>
-cv::Vec3b Laplasian<cv::Vec3b, cv::Vec3i>(cv::Mat roi) {
-  cv::Vec3b result;
+cv::Vec3i Laplasian(cv::Mat roi) {
   cv::Vec3i resultAllignment;
   int x = roi.cols / 2;
   int y = roi.rows / 2;
@@ -72,9 +53,8 @@ cv::Vec3b Laplasian<cv::Vec3b, cv::Vec3i>(cv::Mat roi) {
   cv::Vec3i val_4 = roi.at<cv::Vec3b>(x, y - 1);
   cv::Vec3i val_0 = roi.at<cv::Vec3b>(x, y);
   cv::Vec3i val_res = val_1 + val_2 + val_3 + val_4 - 4 * val_0;
-  resultAllignment = CVAbs(val_res);
-  result = resultAllignment;
-  return result;
+  resultAllignment = val_res;
+  return resultAllignment;
 }
 
 }  // namespace
@@ -145,8 +125,10 @@ cv::Mat Filtering::LaplasianFilter(cv::Mat image, double alpha) {
       cv::Rect window(j - shift, i - shift, windowSize, windowSize);
       switch (result.channels()) {
         case 3: {
+          auto laplasian = Laplasian(image(window));
+          cv::Vec3b laplasianVec = alpha * laplasian;
           result.at<cv::Vec3b>(i, j) =
-              image.at<cv::Vec3b>(i, j) - alpha * Laplasian<cv::Vec3b, cv::Vec3i>(image(window));
+              image.at<cv::Vec3b>(i, j) + laplasianVec;
         }
       }
     }
@@ -156,7 +138,8 @@ cv::Mat Filtering::LaplasianFilter(cv::Mat image, double alpha) {
 }
 
 cv::Mat Filtering::UnsharpMasking(cv::Mat image, cv::Mat smoothed_image, double alpha) {
-  return (image + alpha * (image - smoothed_image));
+  cv::Mat result = (image + alpha * (image - smoothed_image));
+  return result;
 }
 
 std::pair<cv::Mat, double> Filtering::CalcDiff(cv::Mat image_1,
