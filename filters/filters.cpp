@@ -1,5 +1,7 @@
 #include "filters.h"
 
+#include <opencv2/opencv.hpp>
+
 #define PI 3.14159265
 
 namespace {
@@ -44,7 +46,6 @@ pixel_t Gaussian(cv::Mat roi, double sigma) {
 }
 
 cv::Vec3i Laplasian(cv::Mat roi) {
-  cv::Vec3i resultAllignment;
   int x = roi.cols / 2;
   int y = roi.rows / 2;
   cv::Vec3i val_1 = roi.at<cv::Vec3b>(x + 1, y);
@@ -53,8 +54,7 @@ cv::Vec3i Laplasian(cv::Mat roi) {
   cv::Vec3i val_4 = roi.at<cv::Vec3b>(x, y - 1);
   cv::Vec3i val_0 = roi.at<cv::Vec3b>(x, y);
   cv::Vec3i val_res = val_1 + val_2 + val_3 + val_4 - 4 * val_0;
-  resultAllignment = val_res;
-  return resultAllignment;
+  return val_res;
 }
 
 }  // namespace
@@ -125,10 +125,9 @@ cv::Mat Filtering::LaplasianFilter(cv::Mat image, double alpha) {
       cv::Rect window(j - shift, i - shift, windowSize, windowSize);
       switch (result.channels()) {
         case 3: {
-          auto laplasian = Laplasian(image(window));
-          cv::Vec3b laplasianVec = alpha * laplasian;
-          result.at<cv::Vec3b>(i, j) =
-              image.at<cv::Vec3b>(i, j) + laplasianVec;
+          auto pixel_0 = result.at<cv::Vec3b>(i, j);
+          cv::Vec3i pixel = Laplasian(image(window));
+          result.at<cv::Vec3b>(i, j) = pixel;
         }
       }
     }
@@ -137,8 +136,26 @@ cv::Mat Filtering::LaplasianFilter(cv::Mat image, double alpha) {
   return result;
 }
 
-cv::Mat Filtering::UnsharpMasking(cv::Mat image, cv::Mat smoothed_image, double alpha) {
-  cv::Mat result = (image + alpha * (image - smoothed_image));
+cv::Mat Filtering::UnsharpMasking(cv::Mat image, cv::Mat smoothed_image,
+                                  float alpha) {
+  cv::Mat result = cv::Mat::zeros(image.rows, image.cols, CV_32FC3);
+  cv::Mat diff;
+  cv::subtract(image, smoothed_image, diff);
+
+  cv::MatIterator_<cv::Vec3f> it, end;
+  cv::MatIterator_<cv::Vec3b> it_image = image.begin<cv::Vec3b>();
+  cv::MatIterator_<cv::Vec3b> it_diff = diff.begin<cv::Vec3b>();
+  for (it = result.begin<cv::Vec3f>(), end = result.end<cv::Vec3f>(); it != end;
+       it++, it_image++, it_diff++) {
+    for (int c = 0; c < result.channels(); c++) {
+      float buffer =
+          static_cast<float>((*it_image)[c]) + alpha * static_cast<float>((*it_diff)[c]);
+      (*it)[c] = buffer;
+    }
+  }
+  cv::normalize(result, result, 0, 255, cv::NORM_MINMAX);
+  result.convertTo(result, CV_8UC1);
+
   return result;
 }
 
